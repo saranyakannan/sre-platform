@@ -1,0 +1,31 @@
+plugins {
+    id 'org.springframework.boot' version '3.2.0'
+    id 'io.spring.dependency-management' version '1.1.4'
+    id 'java'
+}
+
+group = 'sre'
+version = '1.0-SNAPSHOT'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'com.google.cloud:google-cloud-logging:3.15.9'
+}
+
+springBoot {
+    mainClass = 'sre.errorservice.ErrorServiceApplication'
+}
+
+bootRun {
+    environment 'GOOGLE_CLOUD_PROJECT', 'sre-platform-491809'
+    environment 'SERVER_PORT', '8081'
+}

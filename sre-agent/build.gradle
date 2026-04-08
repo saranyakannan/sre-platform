@@ -1,0 +1,46 @@
+plugins {
+    id 'org.springframework.boot' version '3.3.0'
+    id 'io.spring.dependency-management' version '1.1.4'
+    id 'java'
+}
+
+group = 'sre'
+version = '1.0-SNAPSHOT'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+compileJava.options.compilerArgs += ['-parameters']
+
+springBoot {
+    mainClass = 'sre.agent.SreAgentApplication'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'com.google.adk:google-adk:1.0.0-rc.1'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'com.google.cloud:google-cloud-firestore:3.15.0'
+    implementation 'com.google.cloud:google-cloud-logging:3.15.9'
+    implementation 'io.github.cdimascio:dotenv-java:3.0.0'
+}
+
+tasks.register('runAgent', JavaExec) {
+    dependsOn classes
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'sre.agent.SreAgentApplication'
+    environment 'GOOGLE_GENAI_USE_VERTEXAI', 'TRUE'
+    environment 'GOOGLE_CLOUD_PROJECT', 'sre-platform-491809'
+    environment 'GOOGLE_CLOUD_REGION', 'us-central1'
+}
+
+bootRun {
+    environment 'GOOGLE_GENAI_USE_VERTEXAI', 'TRUE'
+    environment 'GOOGLE_CLOUD_PROJECT', 'sre-platform-491809'
+    environment 'GOOGLE_CLOUD_REGION', 'us-central1'
+}

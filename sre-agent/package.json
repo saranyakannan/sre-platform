@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@google-cloud/observability-mcp": "^0.2.3"
+  }
+}
