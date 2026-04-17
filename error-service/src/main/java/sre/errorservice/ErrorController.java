@@ -98,6 +98,7 @@ public class ErrorController {
                             "memory leak in OrderProcessor"
             );
         }
+        return null;
     }
 
     // ── Database Error ─────────────────────────────────
@@ -270,7 +271,7 @@ public class ErrorController {
                         "JWT payload missing required " +
                                 "claim: userId"
                 );
-            }
+            }c
 
         } catch (IllegalArgumentException e) {
             // Real exception from Base64 decoder
@@ -420,7 +421,11 @@ public class ErrorController {
 
     // ── Helper: infinite recursion ─────────────────────
     private void infiniteRecursion(int depth) {
-        // Calls itself forever
+        // Add a recursion guard to prevent StackOverflowError
+        if (depth > 2000) { // A reasonable limit to demonstrate the fix
+            return;
+        }
+        // Calls itself
         infiniteRecursion(depth + 1);
     }
 
@@ -448,4 +453,3 @@ public class ErrorController {
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(error);
     }
-}
