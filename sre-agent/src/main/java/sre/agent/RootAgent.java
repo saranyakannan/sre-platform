@@ -10,21 +10,23 @@ import java.util.List;
 
 public class RootAgent {
 
-    public static BaseAgent ROOT_AGENT = create();
+    // ✅ Default kept for backward compat
+    public static BaseAgent ROOT_AGENT = create(1);
 
-    public static BaseAgent create() {
+    public static BaseAgent create(int days) {
 
         String projectId =
                 System.getenv("GOOGLE_CLOUD_PROJECT");
 
+        // ✅ Pass days to LogAnalyzerAgent
         SequentialAgent sreWorkflow =
                 SequentialAgent.builder()
                         .name("sre_workflow")
                         .description(
-                                "Full SRE incident analysis workflow"
+                                "SRE incident analysis workflow"
                         )
                         .subAgents(List.of(
-                                LogAnalyzerAgent.create(),
+                                LogAnalyzerAgent.create(days),
                                 FixSuggesterAgent.create(),
                                 ResponseFormatterAgent.create()
                         ))
@@ -34,23 +36,18 @@ public class RootAgent {
                 You are an intelligent SRE Assistant
                 for Google Cloud Platform.
                 
-                You are monitoring project: %s
-                Log name to search: sre-error-service
+                Project: %s
+                Log name: sre-error-service
                 
-                When a user reports an issue:
-                1. Acknowledge briefly
-                2. Say you will check Cloud Logging now
-                3. IMMEDIATELY pass control to
-                   sre_workflow - do not ask questions
-                4. The workflow will:
-                   - Query real Cloud Logging data
-                   - Analyze what errors were found
-                   - Suggest specific fixes
-                   - Format a full incident report
+                CRITICAL: Never call utcnow, get_time,
+                or any date/time tools. Timestamps are
+                already provided to the sub-agents.
                 
-                IMPORTANT: Always delegate to sre_workflow.
-                Never answer directly yourself.
-                The workflow has access to real log data.
+                When user reports an error →
+                delegate to sre_workflow immediately.
+                
+                Do not answer directly.
+                Always delegate to sre_workflow.
                 """,
                 projectId
         );

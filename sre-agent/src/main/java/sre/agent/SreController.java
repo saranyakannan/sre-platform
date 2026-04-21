@@ -15,6 +15,8 @@ import com.google.genai.types.Content;
 import com.google.genai.types.Part;
 import io.reactivex.rxjava3.core.Flowable;
 import org.springframework.web.bind.annotation.*;
+import sre.agent.agents.GitHubPrAgent;
+
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
@@ -74,6 +76,7 @@ public class SreController {
     }
 
     // ── POST /api/analyze ─────────────────────────
+    // ── POST /api/analyze ─────────────────────────
     @PostMapping("/analyze")
     public Map<String, Object> analyze(
             @RequestBody Map<String, String> request
@@ -85,7 +88,22 @@ public class SreController {
                             "Analyze Cloud Logging and help!"
             );
 
-            String report = runAgent(message);
+            // ✅ Extract days from message
+            int days = 1;
+            if (message.contains(
+                    "Time range to analyze: ")) {
+                try {
+                    String daysStr = message
+                            .split("Time range to analyze: ")[1]
+                            .split(" days")[0]
+                            .trim();
+                    days = Integer.parseInt(daysStr);
+                } catch (Exception e) {
+                    days = 1;
+                }
+            }
+
+            String report = runAgent(message, days);
             saveIncident(message, report);
 
             return Map.of(
@@ -98,6 +116,46 @@ public class SreController {
                     "success", false,
                     "error", e.getMessage()
             );
+        }
+    }
+
+    // ── Run agent ─────────────────────────────────
+    private String runAgent(String message, int days) {
+        try {
+            // ✅ Pass days to create fresh agent
+            InMemoryRunner runner = new InMemoryRunner(
+                    RootAgent.create(days), "sre_assistant"
+            );
+
+            Session session = runner
+                    .sessionService()
+                    .createSession("sre_assistant", "user")
+                    .blockingGet();
+
+            Content content = Content.fromParts(
+                    Part.fromText(message)
+            );
+
+            AtomicReference<String> response =
+                    new AtomicReference<>("");
+
+            runner.runAsync(
+                    "user", session.id(), content
+            ).blockingForEach(event -> {
+                if (event.finalResponse()) {
+                    String text =
+                            event.stringifyContent();
+                    if (text != null
+                            && !text.isEmpty()) {
+                        response.set(text);
+                    }
+                }
+            });
+
+            return response.get();
+
+        } catch (Exception e) {
+            throw new RuntimeException(e.getMessage());
         }
     }
 
@@ -246,6 +304,52 @@ public class SreController {
         }
     }
 
+    // ── GET /api/incidents/{errorType} ───────────────
+    @GetMapping("/incidents/{errorType}")
+    public Map<String, Object> getIncidentByType(
+            @PathVariable String errorType
+    ) {
+        try {
+            Firestore db = getFirestore();
+
+            List<QueryDocumentSnapshot> docs =
+                    db.collection("incidents")
+                            .whereEqualTo("errorType", errorType)
+                            .orderBy("timestamp",
+                                    com.google.cloud.firestore
+                                            .Query.Direction.DESCENDING)
+                            .limit(1)
+                            .get()
+                            .get()
+                            .getDocuments();
+
+            db.close();
+
+            if (!docs.isEmpty()) {
+                Map<String, Object> inc =
+                        new HashMap<>(docs.get(0).getData());
+                inc.put("id", docs.get(0).getId());
+                return Map.of(
+                        "success", true,
+                        "found", true,
+                        "incident", inc
+                );
+            }
+
+            return Map.of(
+                    "success", true,
+                    "found", false
+            );
+
+        } catch (Exception e) {
+            return Map.of(
+                    "success", false,
+                    "found", false,
+                    "error", e.getMessage()
+            );
+        }
+    }
+
     // ── Save incident to Firestore ────────────────
     private void saveIncident(
             String message,
@@ -290,6 +394,86 @@ public class SreController {
             System.err.println(
                     "Failed to save incident: " +
                             e.getMessage()
+            );
+        }
+    }
+
+    // ── POST /api/raise-pr ────────────────────────────
+    @PostMapping("/raise-pr")
+    public Map<String, Object> raisePr(
+            @RequestBody Map<String, String> request
+    ) {
+        try {
+            String errorType = request.getOrDefault(
+                    "errorType", "Unknown"
+            );
+            String report = request.getOrDefault(
+                    "report", ""
+            );
+
+            String message = String.format(
+                    "errorType: %s\nreport:\n%s",
+                    errorType, report
+            );
+
+            InMemoryRunner runner = new InMemoryRunner(
+                    GitHubPrAgent.create(),
+                    "github_pr_agent"
+            );
+
+            Session session = runner
+                    .sessionService()
+                    .createSession(
+                            "github_pr_agent", "user"
+                    )
+                    .blockingGet();
+
+            Content content = Content.fromParts(
+                    Part.fromText(message)
+            );
+
+            AtomicReference<String> response =
+                    new AtomicReference<>("");
+
+            runner.runAsync(
+                    "user", session.id(), content
+            ).blockingForEach(event -> {
+                if (event.finalResponse()) {
+                    String text =
+                            event.stringifyContent();
+                    if (text != null
+                            && !text.isEmpty()) {
+                        response.set(text);
+                    }
+                }
+            });
+
+            String result = response.get();
+
+            // Extract PR URL and file changed from response
+            String prUrl = "";
+            String fileChanged = "";
+
+            for (String line : result.split("\n")) {
+                if (line.trim().startsWith("PR_URL:")) {
+                    prUrl = line.replace("PR_URL:", "").trim();
+                }
+                if (line.trim().startsWith("FILE:")) {
+                    fileChanged = line.replace("FILE:", "").trim();
+                }
+            }
+
+            return Map.of(
+                    "success", true,
+                    "result", result,
+                    "prUrl", prUrl,
+                    "fileChanged", fileChanged
+            );
+
+        } catch (Exception e) {
+            return Map.of(
+                    "success", false,
+                    "error", e.getMessage()
             );
         }
     }

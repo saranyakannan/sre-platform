@@ -12,7 +12,7 @@ import java.util.Map;
 
 public class LogAnalyzerAgent {
 
-    public static LlmAgent create() {
+    public static LlmAgent create(int days) {
 
         String projectId =
                 System.getenv("GOOGLE_CLOUD_PROJECT");
@@ -34,20 +34,19 @@ public class LogAnalyzerAgent {
                 serverParams.toServerParameters()
         );
 
-        // ✅ Compute timestamps in Java
-        // so Gemini never needs to call utcnow
+        // ✅ Use days from frontend filter
         ZonedDateTime now =
                 ZonedDateTime.now(ZoneOffset.UTC);
-        ZonedDateTime oneHourAgo =
-                now.minusHours(1);
+        ZonedDateTime startTime =
+                now.minusDays(days);
 
         DateTimeFormatter fmt =
                 DateTimeFormatter.ofPattern(
                         "yyyy-MM-dd'T'HH:mm:ss'Z'"
                 );
 
-        String nowStr = now.format(fmt);
-        String oneHourAgoStr = oneHourAgo.format(fmt);
+        String nowStr       = now.format(fmt);
+        String startTimeStr = startTime.format(fmt);
 
         String instruction = String.format("""
                 You are an expert SRE Log Analyzer.
@@ -60,18 +59,19 @@ public class LogAnalyzerAgent {
                 From:       %s
                 Until:      %s
                 
-                IMMEDIATELY search logs using this filter:
+                IMMEDIATELY search logs using
+                this exact filter:
                 logName="projects/%s/logs/sre-error-service"
                 AND severity>=ERROR
                 AND timestamp>="%s"
                 AND timestamp<="%s"
                 
                 Steps:
-                1. Query Cloud Logging with the filter above
+                1. Query Cloud Logging with the filter
                 2. Identify all error types found
                 3. Count how many times each occurred
                 4. Extract stack trace snippets
-                5. Note the affected service and endpoint
+                5. Note the affected service/endpoint
                 6. Include any WARNING logs too
                 
                 Report your findings clearly.
@@ -80,10 +80,10 @@ public class LogAnalyzerAgent {
                 Start querying immediately.
                 """,
                 projectId,
-                oneHourAgoStr,
+                startTimeStr,
                 nowStr,
                 projectId,
-                oneHourAgoStr,
+                startTimeStr,
                 nowStr
         );
 
@@ -91,8 +91,8 @@ public class LogAnalyzerAgent {
                 .name("log_analyzer")
                 .model("gemini-2.5-flash")
                 .description(
-                        "Analyzes Google Cloud Logging to " +
-                                "find errors and root causes"
+                        "Analyzes Google Cloud Logging " +
+                                "to find errors and root causes"
                 )
                 .instruction(instruction)
                 .tools(List.of(mcpToolset))
